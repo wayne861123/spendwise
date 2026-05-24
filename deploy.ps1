@@ -220,7 +220,10 @@ Write-Host "     Name:           spendwise" -ForegroundColor White
 Write-Host "     Region:         Singapore (or closest to you)" -ForegroundColor White
 Write-Host "     Branch:         main" -ForegroundColor White
 Write-Host "     Build Command:  pip install -r requirements.txt" -ForegroundColor White
-Write-Host "     Start Command:  gunicorn -c gunicorn.conf.py app:app" -ForegroundColor White
+Write-Host "     Start Command:  gunicorn -c gunicorn.conf.py app:app
+     Environment variables:
+       - RENDER = true
+       - SECRET_KEY = any-random-string" -ForegroundColor White
 Write-Host ""
 Write-Host "  5. Scroll down to 'Environment' section" -ForegroundColor Gray
 Write-Host "  6. Click 'Add Environment Variable'" -ForegroundColor Gray

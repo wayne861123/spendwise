@@ -1,1 +1,1 @@
-web: gunicorn -c gunicorn.conf.py app:app
+web: mkdir -p /data && gunicorn -c gunicorn.conf.py app:app
