@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block title %}報表分析 - Spendwise{% endblock %}
+{% block page_title %}報表分析{% endblock %}
+{% block content %}
+<!-- Month Selector -->
+<div class="month-selector">
+    <a href="{{ url_for('main.reports', month=(month_str[:4]|int - 1 ~ month_str[5:]|int)|string + '-' + month_str[5:] if month_str else '') }}">
+        <i data-lucide="chevron-left"></i>
+    </a>
+    <div class="month-display">{{ month_name }}</div>
+    <a href="{{ url_for('main.reports', month=month_str) }}">
+        <i data-lucide="chevron-right"></i>
+    </a>
+    <form method="GET" action="{{ url_for('main.reports') }}" style="margin-left: 16px;">
+        <input type="month" name="month" class="form-input" value="{{ month_str }}" style="width:auto;">
+        <button type="submit" class="btn btn-secondary btn-sm" style="margin-left:8px;">查詢</button>
+    </form>
+</div>
+
+<!-- Comparison -->
+<div class="report-comparison">
+    <div class="comparison-card">
+        <div class="comparison-label">收入</div>
+        <div class="comparison-value" style="color:var(--success);">{{ "NT$ {:,.0f}".format(income) }}</div>
+        <div class="comparison-change {% if income > prev_income %}up{% elif income < prev_income %}down{% endif %}">
+            {% if prev_income > 0 %}
+                {% if income > prev_income %}<i data-lucide="trending-up"></i>+{{ ((income - prev_income) / prev_income * 100)|round|int }}%{% elif income < prev_income %}<i data-lucide="trending-down"></i>{{ ((income - prev_income) / prev_income * 100)|round|int }}%{% else %}持平{% endif %}
+            {% else %}
+                vs 上月
+            {% endif %}
+        </div>
+    </div>
+    <div class="comparison-card">
+        <div class="comparison-label">支出</div>
+        <div class="comparison-value" style="color:var(--danger);">{{ "NT$ {:,.0f}".format(expense) }}</div>
+        <div class="comparison-change {% if expense > prev_expense %}down{% elif expense < prev_expense %}up{% endif %}">
+            {% if prev_expense > 0 %}
+                {% if expense > prev_expense %}<i data-lucide="trending-up"></i>+{{ ((expense - prev_expense) / prev_expense * 100)|round|int }}%{% elif expense < prev_expense %}<i data-lucide="trending-down"></i>{{ ((expense - prev_expense) / prev_expense * 100)|round|int }}%{% else %}持平{% endif %}
+            {% else %}
+                vs 上月
+            {% endif %}
+        </div>
+    </div>
+    <div class="comparison-card">
+        <div class="comparison-label">結餘</div>
+        <div class="comparison-value" style="color:{% if balance >= 0 %}var(--success){% else %}var(--danger){% endif};">
+            {{ "NT$ {:,.0f}".format(balance) }}
+        </div>
+    </div>
+</div>
+
+<!-- Charts -->
+<div class="charts-grid">
+    <div class="chart-card">
+        <div class="chart-title">收入 vs 支出</div>
+        <div class="chart-container" style="height:280px;">
+            <canvas id="comparisonChart"></canvas>
+        </div>
+    </div>
+    <div class="chart-card">
+        <div class="chart-title">支出分類</div>
+        <div class="chart-container" style="height:280px;">
+            <canvas id="categoryChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Category Detail -->
+{% if categories %}
+<div class="card" style="margin-top:24px;">
+    <div class="card-header">
+        <h3 class="chart-title">支出明細</h3>
+    </div>
+    <div class="table-wrapper" style="border:none; border-radius:0;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>分類</th>
+                    <th style="text-align:right;">金額</th>
+                    <th style="text-align:right;">佔比</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cat in categories %}
+                <tr>
+                    <td>
+                        <span class="category-badge" style="background:{{ cat.color }}20; border-left: 3px solid {{ cat.color }};">
+                            {{ cat.icon }} {{ cat.name }}
+                        </span>
+                    </td>
+                    <td style="text-align:right;">
+                        <span class="amount-expense">NT$ {{ "{:,}".format(cat.total|int) }}</span>
+                    </td>
+                    <td style="text-align:right;">
+                        <div style="display:flex; align-items:center; justify-content:flex-end; gap:12px;">
+                            <div style="flex:1; max-width:120px; height:6px; background:var(--bg-tertiary); border-radius:99px; overflow:hidden;">
+                                <div style="width:{{ (cat.total / expense * 100)|round|int }}%; height:100%; background:{{ cat.color }}; border-radius:99px;"></div>
+                            </div>
+                            <span style="min-width:40px; text-align:right;">{{ (cat.total / expense * 100)|round|int }}%</span>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+const comparisonCtx = document.getElementById('comparisonChart').getContext('2d');
+new Chart(comparisonCtx, {
+    type: 'bar',
+    data: {
+        labels: ['本月'],
+        datasets: [
+            {
+                label: '收入',
+                data: [{{ income }}],
+                backgroundColor: 'rgba(16, 185, 129, 0.7)',
+                borderColor: '#10b981',
+                borderWidth: 1,
+                borderRadius: 8,
+            },
+            {
+                label: '支出',
+                data: [{{ expense }}],
+                backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                borderColor: '#ef4444',
+                borderWidth: 1,
+                borderRadius: 8,
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'top',
+                labels: { color: '#94a3b8', font: { size: 13 }, usePointStyle: true, pointStyle: 'circle' }
+            },
+            tooltip: {
+                backgroundColor: '#1e293b',
+                titleColor: '#f8fafc',
+                bodyColor: '#94a3b8',
+                borderColor: '#334155',
+                borderWidth: 1,
+                padding: 12,
+                callbacks: {
+                    label: (ctx) => ctx.dataset.label + ': NT$ ' + ctx.raw.toLocaleString('zh-TW')
+                }
+            }
+        },
+        scales: {
+            x: { grid: { display: false }, ticks: { color: '#64748b' } },
+            y: {
+                grid: { color: '#334155' },
+                ticks: {
+                    color: '#64748b',
+                    callback: (val) => 'NT$' + (val >= 1000000 ? (val/1000000).toFixed(1) + 'M' : val >= 1000 ? (val/1000).toFixed(0) + 'k' : val)
+                }
+            }
+        }
+    }
+});
+
+const categories = {{ categories | tojson }};
+if (categories.length > 0) {
+    const catCtx = document.getElementById('categoryChart').getContext('2d');
+    new Chart(catCtx, {
+        type: 'doughnut',
+        data: {
+            labels: categories.map(c => c.name),
+            datasets: [{
+                data: categories.map(c => c.total),
+                backgroundColor: categories.map(c => c.color),
+                borderColor: '#1e293b',
+                borderWidth: 3,
+                hoverOffset: 8,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '60%',
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        color: '#94a3b8',
+                        font: { size: 12 },
+                        padding: 10,
+                        usePointStyle: true,
+                        pointStyle: 'circle',
+                        generateLabels: (chart) => {
+                            const data = chart.data;
+                            const total = data.datasets[0].data.reduce((a, b) => a + b, 0);
+                            return data.labels.map((label, i) => ({
+                                text: label + ' ' + Math.round(data.datasets[0].data[i] / total * 100) + '%',
+                                fillStyle: data.datasets[0].backgroundColor[i],
+                                strokeStyle: data.datasets[0].backgroundColor[i],
+                                lineWidth: 0,
+                                pointStyle: 'circle',
+                                index: i
+                            }));
+                        }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: '#1e293b',
+                    titleColor: '#f8fafc',
+                    bodyColor: '#94a3b8',
+                    borderColor: '#334155',
+                    borderWidth: 1,
+                    padding: 12,
+                    callbacks: {
+                        label: (ctx) => 'NT$ ' + ctx.raw.toLocaleString('zh-TW')
+                    }
+                }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}註冊 - Spendwise{% endblock %}
+{% block auth_content %}
+<div class="auth-page">
+    <div class="auth-container">
+        <div class="auth-header">
+            <a href="{{ url_for('auth.login') }}" class="logo">
+                <span class="logo-icon">💹</span>
+                <span class="logo-text">Spendwise</span>
+            </a>
+            <p class="auth-subtitle">記錄每一筆收支，掌握你的財務未來</p>
+        </div>
+
+        <div class="auth-card">
+            <h2 class="auth-title">建立新帳戶</h2>
+
+            <form method="POST" action="{{ url_for('auth.register') }}" class="auth-form" novalidate>
+                {{ form.hidden_tag() }}
+
+                <div class="form-group">
+                    <label for="name">{{ form.name.label.text }}</label>
+                    {{ form.name(class="form-input", placeholder="輸入你的姓名", autocomplete="name") }}
+                    {% if form.name.errors %}
+                    <span class="form-error">{{ form.name.errors[0] }}</span>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="email">{{ form.email.label.text }}</label>
+                    {{ form.email(class="form-input", placeholder="your@email.com", autocomplete="email") }}
+                    {% if form.email.errors %}
+                    <span class="form-error">{{ form.email.errors[0] }}</span>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="password">{{ form.password.label.text }}</label>
+                    <div class="password-field">
+                        {{ form.password(class="form-input", placeholder="至少 8 字元，含數字與特殊符號", autocomplete="new-password") }}
+                        <button type="button" class="password-toggle" aria-label="顯示密碼">
+                            <i data-lucide="eye"></i>
+                        </button>
+                    </div>
+                    {% if form.password.errors %}
+                    <span class="form-error">{{ form.password.errors[0] }}</span>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="confirm_password">{{ form.confirm_password.label.text }}</label>
+                    <div class="password-field">
+                        {{ form.confirm_password(class="form-input", placeholder="再次輸入密碼", autocomplete="new-password") }}
+                        <button type="button" class="password-toggle" aria-label="顯示密碼">
+                            <i data-lucide="eye"></i>
+                        </button>
+                    </div>
+                    {% if form.confirm_password.errors %}
+                    <span class="form-error">{{ form.confirm_password.errors[0] }}</span>
+                    {% endif %}
+                </div>
+
+                <div class="form-hint">
+                    <i data-lucide="info"></i>
+                    密碼需包含至少 8 個字元、一個數字及一個特殊符號
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-full">
+                    <i data-lucide="user-plus"></i>
+                    {{ form.submit.label.text }}
+                </button>
+            </form>
+
+            <div class="auth-footer">
+                <p>已有帳戶？ <a href="{{ url_for('auth.login') }}">立即登入</a></p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

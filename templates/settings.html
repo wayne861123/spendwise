@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}設定 - Spendwise{% endblock %}
+{% block page_title %}設定{% endblock %}
+{% block content %}
+<div class="settings-grid">
+    <div class="settings-card animate-slide-up">
+        <h3>個人資料</h3>
+        <form method="POST" action="{{ url_for('main.settings') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label for="name">{{ profile_form.name.label.text }}</label>
+                {{ profile_form.name(class="form-input") }}
+                {% if profile_form.name.errors %}
+                <span class="form-error">{{ profile_form.name.errors[0] }}</span>
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <label>電子郵件</label>
+                <input type="email" class="form-input" value="{{ current_user.email }}" disabled>
+                <span class="form-hint" style="margin-top:4px;">
+                    <i data-lucide="info"></i>
+                    Email 無法修改
+                </span>
+            </div>
+            <button type="submit" name="submit_profile" class="btn btn-primary">
+                <i data-lucide="check"></i>
+                儲存變更
+            </button>
+        </form>
+    </div>
+
+    <div class="settings-card animate-slide-up" style="animation-delay:100ms;">
+        <h3>修改密碼</h3>
+        <form method="POST" action="{{ url_for('main.settings') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label for="old_password">{{ password_form.old_password.label.text }}</label>
+                <div class="password-field">
+                    <input type="password" id="old_password" name="old_password" class="form-input" placeholder="輸入舊密碼" autocomplete="current-password">
+                    <button type="button" class="password-toggle" aria-label="顯示密碼">
+                        <i data-lucide="eye"></i>
+                    </button>
+                </div>
+                {% if password_form.old_password.errors %}
+                <span class="form-error">{{ password_form.old_password.errors[0] }}</span>
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <label for="new_password">{{ password_form.new_password.label.text }}</label>
+                <div class="password-field">
+                    {{ password_form.new_password(class="form-input", placeholder="輸入新密碼", autocomplete="new-password") }}
+                    <button type="button" class="password-toggle" aria-label="顯示密碼">
+                        <i data-lucide="eye"></i>
+                    </button>
+                </div>
+                {% if password_form.new_password.errors %}
+                <span class="form-error">{{ password_form.new_password.errors[0] }}</span>
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <label for="confirm_password">{{ password_form.confirm_password.label.text }}</label>
+                <div class="password-field">
+                    {{ password_form.confirm_password(class="form-input", placeholder="再次輸入新密碼", autocomplete="new-password") }}
+                    <button type="button" class="password-toggle" aria-label="顯示密碼">
+                        <i data-lucide="eye"></i>
+                    </button>
+                </div>
+                {% if password_form.confirm_password.errors %}
+                <span class="form-error">{{ password_form.confirm_password.errors[0] }}</span>
+                {% endif %}
+            </div>
+            <div class="form-hint">
+                <i data-lucide="info"></i>
+                密碼需包含至少 8 個字元及一個數字
+            </div>
+            <button type="submit" name="submit_password" class="btn btn-secondary">
+                <i data-lucide="lock"></i>
+                更新密碼
+            </button>
+        </form>
+    </div>
+
+    <div class="settings-card animate-slide-up" style="animation-delay:200ms; grid-column: 1 / -1;">
+        <h3>帳戶資訊</h3>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px;">
+            <div>
+                <div style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">姓名</div>
+                <div style="font-weight:500;">{{ current_user.name }}</div>
+            </div>
+            <div>
+                <div style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">Email</div>
+                <div style="font-weight:500;">{{ current_user.email }}</div>
+            </div>
+            <div>
+                <div style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">註冊日期</div>
+                <div style="font-weight:500;">{{ current_user.created_at.strftime('%Y-%m-%d') }}</div>
+            </div>
+        </div>
+        <div style="margin-top:24px; padding-top:20px; border-top:1px solid var(--border);">
+            <a href="{{ url_for('auth.logout') }}" class="btn btn-danger">
+                <i data-lucide="log-out"></i>
+                登出帳戶
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

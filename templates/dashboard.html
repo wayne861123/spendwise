@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}總覽 - Spendwise{% endblock %}
+{% block page_title %}總覽{% endblock %}
+{% block top_bar_actions %}
+<button class="btn btn-primary" onclick="openTransactionModal()">
+    <i data-lucide="plus"></i>
+    新增交易
+</button>
+{% endblock %}
+{% block content %}
+<!-- Summary Cards -->
+<div class="summary-grid animate-slide-up">
+    <div class="summary-card income">
+        <div class="summary-label">
+            <i data-lucide="trending-up" class="summary-icon"></i>
+            本月收入
+        </div>
+        <div class="summary-value income">{{ "NT$ {:,.0f}".format(income) }}</div>
+    </div>
+    <div class="summary-card expense">
+        <div class="summary-label">
+            <i data-lucide="trending-down" class="summary-icon"></i>
+            本月支出
+        </div>
+        <div class="summary-value expense">{{ "NT$ {:,.0f}".format(expense) }}</div>
+    </div>
+    <div class="summary-card balance">
+        <div class="summary-label">
+            <i data-lucide="wallet" class="summary-icon"></i>
+            本月結餘
+        </div>
+        <div class="summary-value {% if balance >= 0 %}positive{% else %}negative{% endif %}">
+            {{ "NT$ {:,.0f}".format(balance) }}
+        </div>
+    </div>
+</div>
+
+<!-- Charts -->
+<div class="charts-grid animate-slide-up" style="animation-delay: 100ms;">
+    <div class="chart-card">
+        <div class="chart-title">每日支出</div>
+        <div class="chart-container">
+            <canvas id="dailyExpenseChart"></canvas>
+        </div>
+    </div>
+    <div class="chart-card">
+        <div class="chart-title">支出分類</div>
+        <div class="chart-container">
+            <canvas id="categoryChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Transactions -->
+<div class="dashboard-chart-section animate-slide-up" style="animation-delay: 200ms;">
+    <div class="card-header">
+        <h3 class="chart-title">最近交易</h3>
+        <a href="{{ url_for('main.transactions') }}" class="btn btn-ghost btn-sm">查看全部</a>
+    </div>
+    {% if recent %}
+    <div class="recent-list">
+        {% for trans in recent %}
+        <div class="recent-item">
+            <div class="recent-icon" style="background: {{ trans.category.color }}20;">
+                {{ trans.category.icon }}
+            </div>
+            <div class="recent-info">
+                <div class="recent-category">{{ trans.category.name }}</div>
+                <div class="recent-note">{{ trans.note or '' }}</div>
+            </div>
+            <div class="recent-date">{{ trans.date.strftime('%m/%d') }}</div>
+            <div class="recent-amount {% if trans.type == 'income' %}amount-income{% else %}amount-expense{% endif %}">
+                {{ '+' if trans.type == 'income' else '-' }}{{ "NT$ {:,.0f}".format(trans.amount) }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">📝</div>
+        <h3>還沒有交易記錄</h3>
+        <p>新增你的第一筆記錄，開始追蹤財務</p>
+        <button class="btn btn-primary" onclick="openTransactionModal()">
+            <i data-lucide="plus"></i>
+            新增交易
+        </button>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+// Daily Expense Bar Chart
+const dailyLabels = {{ daily_labels | safe }};
+const dailyValues = {{ daily_values | tojson }};
+const lastDay = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+const labels = Array.from({length: lastDay}, (_, i) => String(i + 1).padStart(2, '0'));
+
+const ctx1 = document.getElementById('dailyExpenseChart').getContext('2d');
+new Chart(ctx1, {
+    type: 'bar',
+    data: {
+        labels: labels,
+        datasets: [{
+            label: '支出',
+            data: dailyValues,
+            backgroundColor: 'rgba(245, 158, 11, 0.6)',
+            borderColor: '#f59e0b',
+            borderWidth: 1,
+            borderRadius: 4,
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: '#1e293b',
+                titleColor: '#f8fafc',
+                bodyColor: '#94a3b8',
+                borderColor: '#334155',
+                borderWidth: 1,
+                padding: 12,
+                callbacks: {
+                    label: (ctx) => 'NT$ ' + ctx.raw.toLocaleString('zh-TW')
+                }
+            }
+        },
+        scales: {
+            x: {
+                grid: { display: false },
+                ticks: { color: '#64748b', font: { size: 11 }, maxTicksLimit: 10 }
+            },
+            y: {
+                grid: { color: '#334155' },
+                ticks: {
+                    color: '#64748b',
+                    font: { size: 11 },
+                    callback: (val) => 'NT$' + (val >= 1000 ? (val/1000).toFixed(0) + 'k' : val)
+                }
+            }
+        }
+    }
+});
+
+// Category Donut Chart
+const categories = {{ categories | tojson }};
+if (categories.length > 0) {
+    const ctx2 = document.getElementById('categoryChart').getContext('2d');
+    new Chart(ctx2, {
+        type: 'doughnut',
+        data: {
+            labels: categories.map(c => c.name),
+            datasets: [{
+                data: categories.map(c => c.total),
+                backgroundColor: categories.map(c => c.color),
+                borderColor: '#1e293b',
+                borderWidth: 3,
+                hoverOffset: 8,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '65%',
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        color: '#94a3b8',
+                        font: { size: 12 },
+                        padding: 12,
+                        usePointStyle: true,
+                        pointStyle: 'circle',
+                        generateLabels: (chart) => {
+                            const data = chart.data;
+                            const total = data.datasets[0].data.reduce((a, b) => a + b, 0);
+                            return data.labels.map((label, i) => ({
+                                text: label + ' ' + Math.round(data.datasets[0].data[i] / total * 100) + '%',
+                                fillStyle: data.datasets[0].backgroundColor[i],
+                                strokeStyle: data.datasets[0].backgroundColor[i],
+                                lineWidth: 0,
+                                pointStyle: 'circle',
+                                index: i
+                            }));
+                        }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: '#1e293b',
+                    titleColor: '#f8fafc',
+                    bodyColor: '#94a3b8',
+                    borderColor: '#334155',
+                    borderWidth: 1,
+                    padding: 12,
+                    callbacks: {
+                        label: (ctx) => {
+                            const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                            return 'NT$ ' + ctx.raw.toLocaleString('zh-TW') + ' (' + Math.round(ctx.raw / total * 100) + '%)';
+                        }
+                    }
+                }
+            }
+        }
+    });
+} else {
+    document.getElementById('categoryChart').parentElement.innerHTML = '<div class="empty-state" style="padding:40px"><p>尚無支出資料</p></div>';
+}
+</script>
+{% endblock %}
