@@ -1,6 +1,7 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
+from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from datetime import datetime, timedelta
+import logging
 from sqlalchemy import func, extract
 from models import db, User, Category, Transaction
 from forms import RegisterForm, LoginForm, TransactionForm, CategoryForm, ProfileForm, PasswordForm
@@ -54,13 +55,6 @@ def register():
         )
         user.set_password(form.password.data)
         db.session.add(user)
-        db.session.commit()
-
-        # Create default categories for this user
-        defaults = Category.get_defaults()
-        for cat_data in defaults:
-            cat = Category(user_id=user.id, is_default=True, **cat_data)
-            db.session.add(cat)
         db.session.commit()
 
         flash('註冊成功！請登入', 'success')
@@ -143,11 +137,17 @@ def dashboard():
     chart_expense = expense
     chart_balance = balance
 
+    # Convert SQLAlchemy rows to plain dicts for JSON serialization
+    categories_data = [
+        {'name': c.name, 'color': c.color, 'icon': c.icon, 'total': float(c.total)}
+        for c in category_breakdown
+    ]
+
     return render_template('dashboard.html',
                            income=income, expense=expense, balance=balance,
                            recent=recent, chart_income=chart_income,
                            chart_expense=chart_expense, chart_balance=chart_balance,
-                           categories=category_breakdown,
+                           categories=categories_data,
                            daily_labels=daily_labels, daily_values=daily_values,
                            month_name=today.strftime('%Y年%m月'))
 
@@ -273,6 +273,7 @@ def reports():
     # Previous month comparison
     prev_first = (first_day - timedelta(days=1)).replace(day=1)
     prev_last = first_day - timedelta(days=1)
+    prev_month_str = prev_first.strftime('%Y-%m')
     prev_income = db.session.query(func.sum(Transaction.amount)).filter(
         Transaction.user_id == current_user.id,
         Transaction.type == 'income',
@@ -288,10 +289,11 @@ def reports():
 
     return render_template('reports.html',
                            income=income, expense=expense, balance=balance,
-                           categories=category_breakdown,
+                           categories=[{'name': c.name, 'color': c.color, 'icon': c.icon, 'total': float(c.total)} for c in category_breakdown],
                            prev_income=prev_income, prev_expense=prev_expense,
                            month_name=target_date.strftime('%Y年%m月'),
-                           month_str=target_date.strftime('%Y-%m'))
+                           month_str=target_date.strftime('%Y-%m'),
+                           prev_month_str=prev_month_str)
 
 
 @main.route('/settings', methods=['GET', 'POST'])
@@ -325,29 +327,60 @@ def settings():
 @api.route('/transactions', methods=['POST'])
 @login_required
 def create_transaction():
-    form = TransactionForm()
-    form.category_id.choices = [(c.id, f"{c.icon} {c.name}") for c in
-                                 Category.query.filter(
-                                     (Category.user_id == current_user.id) | (Category.is_default == True)
-                                 ).order_by(Category.type, Category.name).all()]
+    data = request.get_json()
+    current_app.logger.warning(f'[TRANSACTION] POST /api/transactions | user={current_user.id} | data={data}')
+    if not data:
+        current_app.logger.warning('[TRANSACTION] no JSON data')
+        return jsonify({'success': False, 'message': '無效的請求資料'}), 400
 
-    if not form.category_id.choices:
-        return jsonify({'success': False, 'message': '請先建立分類'}), 400
+    required_fields = ['type', 'amount', 'category_id', 'date']
+    for field in required_fields:
+        if field not in data or data[field] is None or data[field] == '':
+            current_app.logger.warning(f'[TRANSACTION] missing field: {field}')
+            return jsonify({'success': False, 'message': f'缺少必要欄位：{field}'}), 400
 
-    if form.validate_on_submit():
-        trans = Transaction(
-            user_id=current_user.id,
-            type=form.type.data,
-            amount=form.amount.data,
-            category_id=form.category_id.data,
-            date=form.date.data,
-            note=form.note.data or None
+    if data['type'] not in ('income', 'expense'):
+        current_app.logger.warning(f'[TRANSACTION] invalid type: {data.get("type")}')
+        return jsonify({'success': False, 'message': '類型必須是收入或支出'}), 400
+
+    try:
+        amount = float(data['amount'])
+        if amount <= 0:
+            current_app.logger.warning(f'[TRANSACTION] invalid amount: {data["amount"]}')
+            return jsonify({'success': False, 'message': '金額必須大於 0'}), 400
+    except (TypeError, ValueError) as e:
+        current_app.logger.warning(f'[TRANSACTION] amount parse error: {data["amount"]} | {e}')
+        return jsonify({'success': False, 'message': '金額格式無效'}), 400
+
+    # Verify category belongs to this user (either custom or default)
+    cat = Category.query.filter(
+        db.or_(
+            db.and_(Category.id == data['category_id'], Category.is_default == True),
+            db.and_(Category.id == data['category_id'], Category.user_id == current_user.id)
         )
-        db.session.add(trans)
-        db.session.commit()
-        return jsonify({'success': True, 'message': '交易已新增'})
+    ).first()
+    if not cat:
+        current_app.logger.warning(f'[TRANSACTION] category not found: id={data["category_id"]}')
+        return jsonify({'success': False, 'message': '無效的分類'}), 400
 
-    return jsonify({'success': False, 'message': form.errors}), 400
+    try:
+        date = datetime.strptime(data['date'], '%Y-%m-%d').date()
+    except (ValueError, TypeError) as e:
+        current_app.logger.warning(f'[TRANSACTION] date parse error: {data["date"]} | {e}')
+        return jsonify({'success': False, 'message': '日期格式無效（需為 YYYY-MM-DD）'}), 400
+
+    trans = Transaction(
+        user_id=current_user.id,
+        type=data['type'],
+        amount=amount,
+        category_id=cat.id,
+        date=date,
+        note=data.get('note') or None
+    )
+    db.session.add(trans)
+    db.session.commit()
+    current_app.logger.warning(f'[TRANSACTION] success: type={data["type"]} amount={amount} cat={cat.name}')
+    return jsonify({'success': True, 'message': '交易已新增'})
 
 
 @api.route('/transactions/<int:trans_id>', methods=['PUT'])
@@ -357,22 +390,30 @@ def update_transaction(trans_id):
     if not trans:
         return jsonify({'success': False, 'message': '找不到交易'}), 404
 
-    form = TransactionForm()
-    form.category_id.choices = [(c.id, f"{c.icon} {c.name}") for c in
-                                 Category.query.filter(
-                                     (Category.user_id == current_user.id) | (Category.is_default == True)
-                                 ).order_by(Category.type, Category.name).all()]
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'message': '無效的請求資料'}), 400
 
-    if form.validate_on_submit():
-        trans.type = form.type.data
-        trans.amount = form.amount.data
-        trans.category_id = form.category_id.data
-        trans.date = form.date.data
-        trans.note = form.note.data or None
-        db.session.commit()
-        return jsonify({'success': True, 'message': '交易已更新'})
+    try:
+        amount = float(data['amount'])
+        if amount <= 0:
+            return jsonify({'success': False, 'message': '金額必須大於 0'}), 400
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'message': '金額格式無效'}), 400
 
-    return jsonify({'success': False, 'message': form.errors}), 400
+    try:
+        date = datetime.strptime(data['date'], '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'message': '日期格式無效（需為 YYYY-MM-DD）'}), 400
+
+    trans.type = data['type']
+    trans.amount = amount
+    trans.date = date
+    trans.note = data.get('note') or None
+    if 'category_id' in data:
+        trans.category_id = data['category_id']
+    db.session.commit()
+    return jsonify({'success': True, 'message': '交易已更新'})
 
 
 @api.route('/transactions/<int:trans_id>', methods=['DELETE'])
@@ -431,7 +472,16 @@ def update_category(cat_id):
 @login_required
 def list_categories():
     all_cats = Category.query.filter(
-        (Category.user_id == current_user.id) | (Category.is_default == True)
+        db.or_(
+            db.and_(
+                Category.user_id.is_(None),
+                Category.is_default == True
+            ),
+            db.and_(
+                Category.user_id == current_user.id,
+                Category.is_default == False
+            )
+        )
     ).order_by(Category.type, Category.name).all()
     return jsonify({
         'income': [{'id': c.id, 'name': c.name, 'icon': c.icon, 'color': c.color} for c in all_cats if c.type == 'income'],

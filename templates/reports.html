@@ -4,7 +4,7 @@
 {% block content %}
 <!-- Month Selector -->
 <div class="month-selector">
-    <a href="{{ url_for('main.reports', month=(month_str[:4]|int - 1 ~ month_str[5:]|int)|string + '-' + month_str[5:] if month_str else '') }}">
+    <a href="{{ url_for('main.reports', month=prev_month_str) }}">
         <i data-lucide="chevron-left"></i>
     </a>
     <div class="month-display">{{ month_name }}</div>
@@ -43,7 +43,7 @@
     </div>
     <div class="comparison-card">
         <div class="comparison-label">結餘</div>
-        <div class="comparison-value" style="color:{% if balance >= 0 %}var(--success){% else %}var(--danger){% endif};">
+        <div class="comparison-value" style="color: {{ 'var(--success)' if balance >= 0 else 'var(--danger)' }};">
             {{ "NT$ {:,.0f}".format(balance) }}
         </div>
     </div>

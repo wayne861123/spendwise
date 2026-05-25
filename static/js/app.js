@@ -125,7 +125,10 @@ function showToast(message, type = 'info') {
 // ============================================================
 async function openTransactionModal(id = null) {
     const title = id ? '編輯交易' : '新增交易';
-    const categories = await fetchCategories();
+    const cats = await fetchCategories();
+
+    const expenseOptions = cats.expense.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
+    const incomeOptions = cats.income.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
 
     const bodyHTML = `
         <form id="transaction-form" novalidate>
@@ -145,7 +148,7 @@ async function openTransactionModal(id = null) {
             <div class="form-group">
                 <label for="trans-category">分類</label>
                 <select id="trans-category" name="category_id" class="form-input" required>
-                    ${categories.expense.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')}
+                    ${expenseOptions}
                 </select>
             </div>
             <div class="form-group">
@@ -169,10 +172,14 @@ async function openTransactionModal(id = null) {
 
     openModal(title, bodyHTML, footerHTML);
 
+    // Store both category arrays for type switching
+    window._expenseCats = cats.expense;
+    window._incomeCats = cats.income;
+
     // Type switch updates categories
     document.getElementById('trans-type').addEventListener('change', function () {
         const catSelect = document.getElementById('trans-category');
-        const cats = this.value === 'income' ? categories.income : categories.expense;
+        const cats = this.value === 'income' ? window._incomeCats : window._expenseCats;
         catSelect.innerHTML = cats.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
     });
 
@@ -197,8 +204,8 @@ async function loadTransaction(id) {
     document.getElementById('trans-note').value = note === '—' ? '' : note;
 
     // Update categories for this type
-    const categories = await fetchCategories();
-    const cats = type === 'income' ? categories.income : categories.expense;
+    const allCats = await fetchCategories();
+    const cats = type === 'income' ? allCats.income : allCats.expense;
     const catSelect = document.getElementById('trans-category');
     catSelect.innerHTML = cats.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
 
@@ -212,8 +219,8 @@ async function loadTransaction(id) {
 
 async function fetchCategories() {
     try {
-        const resp = await fetch('/categories/api/list', {
-            headers: { 'Accept': 'application/json' }
+        const resp = await fetch('/api/categories/list', {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
         });
         if (resp.ok) {
             const data = await resp.json();
@@ -236,12 +243,17 @@ async function submitTransaction(id) {
     const note = formData.get('note');
 
     // Basic validation
-    if (!amount || parseFloat(amount) <= 0) {
-        showToast('請輸入有效金額', 'error');
+    const amountNum = parseFloat(amount);
+    if (!amount || isNaN(amountNum) || amountNum < 0.01) {
+        showToast('請輸入有效金額（需大於 0）', 'error');
         return;
     }
     if (!date) {
         showToast('請選擇日期', 'error');
+        return;
+    }
+    if (!category_id || category_id === '') {
+        showToast('請選擇分類', 'error');
         return;
     }
 
@@ -256,7 +268,7 @@ async function submitTransaction(id) {
                 'X-CSRFToken': csrf,
                 'X-Requested-With': 'XMLHttpRequest'
             },
-            body: JSON.stringify({ type, amount: parseFloat(amount), category_id: parseInt(category_id), date, note })
+            body: JSON.stringify({ type, amount: amountNum, category_id: parseInt(category_id), date, note })
         });
 
         const data = await resp.json();
