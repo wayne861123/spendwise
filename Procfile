@@ -1,1 +1,0 @@
-web: mkdir -p /data && gunicorn -c gunicorn.conf.py app:app
